@@ -324,12 +324,20 @@ public class CommCarePlatform implements CommCareInstance {
         }
     }
     
+    /**
+     * Loop over installed suites, collecting a large table mapping ids to
+     * action entries.
+     *
+     * @return table containing all installed suites id to action entry
+     * mappings.
+     */
     public Hashtable<String, Entry> getMenuMap() {
         Vector<Suite> installed = getInstalledSuites();
         Hashtable<String, Entry> merged = new Hashtable<String, Entry>();
-        
+
         for(Suite s : installed) {
             Hashtable<String, Entry> table = s.getEntries();
+            // add every key, action pair from suite's entry table to merged
             for(Enumeration en = table.keys() ; en.hasMoreElements() ; ) {
                 String key = (String)en.nextElement();
                 merged.put(key, table.get(key));
