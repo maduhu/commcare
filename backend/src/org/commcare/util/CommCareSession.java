@@ -49,8 +49,13 @@ public class CommCareSession {
         
     protected StackFrameStep popped;
     
+    // An ID pointing to a StackFrameStep in the frame's steps
     protected String currentCmd;
+
+    // Mapping from step id (String) to step value (String) for the current
+    // frame, where only steps of type STATE_DATUM_VAL are considered.
     protected OrderedHashtable data;
+
     protected String currentXmlns;
     
     /** The current session frame data **/
@@ -69,60 +74,70 @@ public class CommCareSession {
     public Vector<Entry> getEntriesForCommand(String commandId) {
         return this.getEntriesForCommand(commandId, new OrderedHashtable());
     }
-    public Vector<Entry> getEntriesForCommand(String commandId, OrderedHashtable data) {
-        Hashtable<String,Entry> map = platform.getMenuMap();
-        Menu menu = null;
-        Entry entry = null;
-        top:
-        for(Suite s : platform.getInstalledSuites()) {
-            for(Menu m : s.getMenus()) {
-                //We need to see if everything in this menu can be matched
-                if(commandId.equals(m.getId())) {
-                    menu = m;
-                    break top;
-                }
-                
-                if(s.getEntries().containsKey(commandId)) {
-                    entry = s.getEntries().get(commandId);
-                    break top;
-                }
-            }
-        }
-        
+
+    /**
+     * If command id points to an entry, return it in a singleton vector. If
+     * command points to a menu, return a vector of all the entries in that
+     * menu.
+     *
+     * @param commandId
+     * @param stepData is an ordered mapping from step id to step value from a
+     * frame's steps
+     */
+    public Vector<Entry> getEntriesForCommand(String commandId, OrderedHashtable stepData) {
+        // global mapping from action's id to entry
+        Hashtable<String, Entry> map = platform.getMenuMap();
+
         Vector<Entry> entries = new Vector<Entry>();
-        if(entry != null) {
-            entries.addElement(entry);
-        }
-        
-        if(menu != null) {
-            //We're in a menu we have a set of requirements which
-            //need to be fulfilled
-            for(String cmd : menu.getCommandIds()) {
-                Entry e = map.get(cmd);
-                if(e == null) { throw new RuntimeException("No entry found for menu command [" + cmd + "]"); }
-                boolean valid = true;
-                Vector<SessionDatum> requirements = e.getSessionDataReqs();
-                if(requirements.size() >= data.size()) {
-                    for(int i = 0 ; i < data.size() ; ++i ) {
-                        if(!requirements.elementAt(i).getDataId().equals(data.keyAt(i)))  {
-                            valid = false;
+
+        for (Suite s : platform.getInstalledSuites()) {
+            if (s.getEntries().containsKey(commandId)) {
+                // the command id points to an entry in the suite
+                entries.addElement(s.getEntries().get(commandId));
+                return entries;
+            }
+            // or see if the command id points to a menu in the suite
+            for (Menu m : s.getMenus()) {
+                if (commandId.equals(m.getId())) {
+                    for (String cmdId : m.getCommandIds()) {
+                        // Add entries from menu to result
+                        Entry e = map.get(cmdId);
+                        if (e == null) {
+                            throw new RuntimeException("No entry found for menu command [" + cmdId + "]");
+                        }
+                        // Check that entries with requirements are fulfilled
+                        // before adding them to the result.
+                        Vector<SessionDatum> requirements = e.getSessionDataReqs();
+                        boolean valid = true;
+                        // Do the steps taken so far match the requirements of the menu entry?
+                        if (requirements.size() >= stepData.size()) {
+                            // XXX: PLM: do we really want to ++i, and not i++?
+                            for (int i = 0; i < stepData.size(); ++i) {
+                                valid = requirements.elementAt(i).getDataId().equals(stepData.keyAt(i));
+                            }
+                        }
+                        if (valid) {
+                            entries.addElement(e);
                         }
                     }
-                }
-                if(valid) {
-                    entries.addElement(e);
+                    return entries;
                 }
             }
         }
+        // retunring an empty vector because command wasn't found or it didn't
+        // have any sub-entries.
         return entries;
     }
-    
+
     protected OrderedHashtable getData() {
         return data;
     }
     
+    /**
+     * @return session frame type or null
+     */
     public String getNeededData() {
-        if(this.getCommand() == null) {
+        if (this.getCommand() == null) {
             return SessionFrame.STATE_COMMAND_ID;
         }
         
